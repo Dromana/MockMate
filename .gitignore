@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Vite / CRX build output
+dist/
+dist
+
+# Local env
+.env
+.env.*
+
+# OS
+.DS_Store
+**/.DS_Store
+
+# Logs & coverage
+*.log
+coverage/

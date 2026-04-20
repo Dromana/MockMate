@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MockMate Test Page</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    button { margin: 4px; padding: 6px 12px; cursor: pointer; }
+    #output { margin-top: 16px; white-space: pre-wrap; background: #f5f5f5; padding: 12px; border-radius: 4px; min-height: 60px; }
+    .group { margin-bottom: 12px; }
+    .group-label { font-size: 11px; color: #666; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <h2>MockMate Test Page</h2>
+
+  <div class="group">
+    <div class="group-label">Basic requests</div>
+    <button id="btn-get-users">GET /api/users</button>
+    <button id="btn-post-login">POST /api/login</button>
+    <button id="btn-get-profile">GET /api/profile</button>
+  </div>
+
+  <div class="group">
+    <div class="group-label">Query params</div>
+    <button id="btn-get-feed">GET /api/feed?limit=5&amp;offset=0</button>
+  </div>
+
+  <div class="group">
+    <div class="group-label">POST with JSON body</div>
+    <button id="btn-post-data">POST /api/data</button>
+  </div>
+
+  <div class="group">
+    <div class="group-label">GraphQL</div>
+    <button id="btn-graphql">POST /api/graphql (GetUser query)</button>
+  </div>
+
+  <div class="group">
+    <div class="group-label">Custom headers</div>
+    <button id="btn-custom-header">GET /api/secure (with x-client header)</button>
+  </div>
+
+  <pre id="output">Click a button to make a request...</pre>
+  <script src="app.js"></script>
+</body>
+</html>

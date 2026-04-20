@@ -1,0 +1,257 @@
+<mxfile host="app.diagrams.net" version="24.0.0">
+  <diagram id="mockmate-arch" name="MockMate Architecture">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- TITLE -->
+        <mxCell id="title" value="MockMate — Architecture &amp; Data Flow" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="10" y="10" width="1180" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ===== LEGEND ===== -->
+        <mxCell id="legendBox" value="Legend" style="swimlane;fontStyle=1;fontSize=11;fillColor=#ffffff;strokeColor=#aaaaaa;startSize=22;" vertex="1" parent="1">
+          <mxGeometry x="900" y="60" width="290" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="ll1" value="" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="legendBox">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="15" y="42" as="sourcePoint" />
+            <mxPoint x="90" y="42" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ll1t" value="Panel → Chrome API" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;align=left;" vertex="1" parent="legendBox">
+          <mxGeometry x="95" y="32" width="185" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="ll2" value="" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#d6b656;strokeWidth=2;" edge="1" parent="legendBox">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="15" y="62" as="sourcePoint" />
+            <mxPoint x="90" y="62" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ll2t" value="Background → Chrome API" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;align=left;" vertex="1" parent="legendBox">
+          <mxGeometry x="95" y="52" width="185" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="ll3" value="" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#b85450;strokeWidth=3;" edge="1" parent="legendBox">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="15" y="82" as="sourcePoint" />
+            <mxPoint x="90" y="82" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ll3t" value="Request intercept / fulfill" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;align=left;" vertex="1" parent="legendBox">
+          <mxGeometry x="95" y="72" width="185" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="ll4" value="" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="legendBox">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="15" y="102" as="sourcePoint" />
+            <mxPoint x="90" y="102" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ll4t" value="Long-lived port (REQUEST_MOCKED)" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;align=left;" vertex="1" parent="legendBox">
+          <mxGeometry x="95" y="92" width="185" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- ===== ZONE 1: WEB PAGE ===== -->
+        <mxCell id="webZone" value="Web Page / Active Tab" style="swimlane;fontStyle=1;fontSize=12;fillColor=#d5e8d4;strokeColor=#82b366;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="10" y="60" width="870" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="activeTab" value="Active Tab&#xa;(User Browsing)" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="webZone">
+          <mxGeometry x="20" y="33" width="150" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="httpReq" value="HTTP Request" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="webZone">
+          <mxGeometry x="220" y="33" width="150" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="chromeFetch" value="Chrome Network Stack&#xa;Fetch.requestPaused fires&#xa;when CDP is attached" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="webZone">
+          <mxGeometry x="430" y="28" width="200" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="ew1" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="httpReq" target="chromeFetch" parent="webZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===== ZONE 2: DEVTOOLS PANEL ===== -->
+        <mxCell id="panelZone" value="Chrome DevTools Panel (React)" style="swimlane;fontStyle=1;fontSize=12;fillColor=#dae8fc;strokeColor=#6c8ebf;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="10" y="185" width="580" height="490" as="geometry" />
+        </mxCell>
+
+        <mxCell id="devtoolsEntry" value="devtools/index.ts&#xa;Registers Panel in DevTools" style="rounded=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="panelZone">
+          <mxGeometry x="415" y="30" width="150" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="appTsx" value="App.tsx&#xa;Main Orchestrator&#xa;Attach / Detach logic" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="panelZone">
+          <mxGeometry x="205" y="30" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="rulesStore" value="RulesStore (Zustand)&#xa;CRUD · persistAndSync()&#xa;loadFromStorage()" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="panelZone">
+          <mxGeometry x="20" y="150" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="logStore" value="LogStore (Zustand)&#xa;appendEntry()&#xa;markAsMocked()" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="panelZone">
+          <mxGeometry x="205" y="150" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="useLogPort" value="useLogPort (hook)&#xa;Long-lived port connection&#xa;Auto-reconnect 500ms" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="panelZone">
+          <mxGeometry x="400" y="150" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="devtoolsNetListener" value="chrome.devtools.network&#xa;onRequestFinished listener" style="rounded=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="panelZone">
+          <mxGeometry x="205" y="270" width="160" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="reactComponents" value="React Components&#xa;RuleList · NetworkLog · RuleEditorModal · StatusBar · Badge · Button · Modal" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="panelZone">
+          <mxGeometry x="20" y="395" width="540" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Panel internal edges -->
+        <mxCell id="ep1" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="appTsx" target="rulesStore" parent="panelZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ep2" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="appTsx" target="logStore" parent="panelZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ep3" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="appTsx" target="useLogPort" parent="panelZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ep4" value="appendEntry()" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="devtoolsNetListener" target="logStore" parent="panelZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ep5" value="markAsMocked()" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="useLogPort" target="logStore" parent="panelZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ep6" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="rulesStore" target="reactComponents" parent="panelZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ep7" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="logStore" target="reactComponents" parent="panelZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===== ZONE 3: BACKGROUND SERVICE WORKER ===== -->
+        <mxCell id="bgZone" value="Background Service Worker" style="swimlane;fontStyle=1;fontSize=12;fillColor=#ffe6cc;strokeColor=#d6b656;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="610" y="185" width="580" height="490" as="geometry" />
+        </mxCell>
+
+        <mxCell id="bgIndex" value="index.ts&#xa;Entry point&#xa;Registers all listeners" style="rounded=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="bgZone">
+          <mxGeometry x="205" y="30" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="msgHandler" value="MessageHandler&#xa;ATTACH / DETACH&#xa;UPDATE_RULES / GET_STATUS" style="rounded=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d6b656;" vertex="1" parent="bgZone">
+          <mxGeometry x="20" y="150" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="debuggerMgr" value="DebuggerManager&#xa;CDP attach / detach&#xa;Rules cache per tab" style="rounded=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d6b656;" vertex="1" parent="bgZone">
+          <mxGeometry x="205" y="150" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="bgStorage" value="Storage&#xa;loadRules()&#xa;saveRules()" style="rounded=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d6b656;" vertex="1" parent="bgZone">
+          <mxGeometry x="400" y="150" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="reqIntercept" value="RequestInterceptor&#xa;handleRequestPaused()&#xa;fulfillRequest() · base64 body" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="bgZone">
+          <mxGeometry x="20" y="290" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ruleMatcher" value="RuleMatcher&#xa;URL (glob / regex / exact)&#xa;Method · Headers · GraphQL op" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="bgZone">
+          <mxGeometry x="210" y="290" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="logBroadcast" value="LogBroadcaster&#xa;Port pub/sub&#xa;Broadcasts REQUEST_MOCKED" style="rounded=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d6b656;" vertex="1" parent="bgZone">
+          <mxGeometry x="400" y="290" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sharedUtils" value="shared/url-pattern.ts · graphql.ts&#xa;Glob/Regex/Exact · GQL op parsing" style="rounded=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="bgZone">
+          <mxGeometry x="210" y="400" width="170" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- BG internal edges -->
+        <mxCell id="eb1" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="bgIndex" target="msgHandler" parent="bgZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eb2" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="bgIndex" target="debuggerMgr" parent="bgZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eb3" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="bgIndex" target="bgStorage" parent="bgZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eb4" value="delegates" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="msgHandler" target="debuggerMgr" parent="bgZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eb5" value="onRequestPaused" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="debuggerMgr" target="reqIntercept" parent="bgZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eb6" value="findMatch()" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="reqIntercept" target="ruleMatcher" parent="bgZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eb7" value="broadcast()" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="reqIntercept" target="logBroadcast" parent="bgZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eb8" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="ruleMatcher" target="sharedUtils" parent="bgZone">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===== ZONE 4: CHROME PLATFORM APIS ===== -->
+        <mxCell id="apisZone" value="Chrome Platform APIs" style="swimlane;fontStyle=1;fontSize=12;fillColor=#f5f5f5;strokeColor=#666666;startSize=25;" vertex="1" parent="1">
+          <mxGeometry x="10" y="695" width="1180" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="apiRuntime" value="chrome.runtime&#xa;onMessage · connect&#xa;Panel ↔ Background" style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666;" vertex="1" parent="apisZone">
+          <mxGeometry x="20" y="45" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="apiStorage" value="chrome.storage.local&#xa;Persist mock rules&#xa;+ globalEnabled flag" style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666;" vertex="1" parent="apisZone">
+          <mxGeometry x="230" y="45" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="apiDebugger" value="chrome.debugger (CDP)&#xa;Fetch.enable · Fetch.disable&#xa;Fetch.fulfillRequest / continueRequest" style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666;" vertex="1" parent="apisZone">
+          <mxGeometry x="440" y="45" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="apiTabs" value="chrome.tabs&#xa;onActivated · onRemoved&#xa;Track active tab ID" style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666;" vertex="1" parent="apisZone">
+          <mxGeometry x="690" y="45" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="apiDevtools" value="chrome.devtools.network&#xa;onRequestFinished&#xa;Network traffic entries" style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666;" vertex="1" parent="apisZone">
+          <mxGeometry x="980" y="45" width="190" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ===== CROSS-ZONE EDGES ===== -->
+
+        <!-- ① Panel App.tsx → chrome.runtime (ATTACH_DEBUGGER / UPDATE_RULES) -->
+        <mxCell id="cx1" value="① ATTACH_DEBUGGER&#xa;UPDATE_RULES" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="appTsx" target="apiRuntime" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ② chrome.runtime → Background MessageHandler (onMessage) -->
+        <mxCell id="cx2" value="② onMessage" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#d6b656;strokeWidth=2;" edge="1" source="apiRuntime" target="msgHandler" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ③ RulesStore → chrome.storage (saveRules) -->
+        <mxCell id="cx3" value="③ saveRules()" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="rulesStore" target="apiStorage" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ④ Background Storage → chrome.storage (get/set) -->
+        <mxCell id="cx4" value="④ get / set" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#d6b656;strokeWidth=2;" edge="1" source="bgStorage" target="apiStorage" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ⑤ DebuggerManager → chrome.debugger (Fetch.enable / Fetch.fulfillRequest) -->
+        <mxCell id="cx5" value="⑤ Fetch.enable&#xa;Fetch.fulfillRequest" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#d6b656;strokeWidth=2;" edge="1" source="debuggerMgr" target="apiDebugger" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ⑥ chrome.debugger fires requestPaused → DebuggerManager callback -->
+        <mxCell id="cx6" value="⑥ requestPaused&#xa;event callback" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#b85450;strokeWidth=3;" edge="1" source="apiDebugger" target="debuggerMgr" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ⑦ RequestInterceptor → chrome.debugger (fulfillRequest with mock body) -->
+        <mxCell id="cx7" value="⑦ fulfillRequest()&#xa;mock response" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#b85450;strokeWidth=3;" edge="1" source="reqIntercept" target="apiDebugger" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ⑧ LogBroadcaster → useLogPort (REQUEST_MOCKED via long-lived port) -->
+        <mxCell id="cx8" value="⑧ REQUEST_MOCKED&#xa;(long-lived port)" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#82b366;strokeWidth=2;" edge="1" source="logBroadcast" target="useLogPort" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ⑨ chrome.devtools.network → Panel devtoolsNetListener (onRequestFinished) -->
+        <mxCell id="cx9" value="⑨ onRequestFinished" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#9673a6;strokeWidth=2;" edge="1" source="apiDevtools" target="devtoolsNetListener" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ⑩ bgIndex → chrome.tabs (onActivated / onRemoved) -->
+        <mxCell id="cx10" value="⑩ onActivated&#xa;onRemoved" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#d6b656;strokeWidth=2;" edge="1" source="bgIndex" target="apiTabs" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ⑪ chromeFetch (web page) → apiDebugger (CDP fires requestPaused) -->
+        <mxCell id="cx11" value="⑪ CDP fires&#xa;requestPaused" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#b85450;strokeWidth=3;" edge="1" source="chromeFetch" target="apiDebugger" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
