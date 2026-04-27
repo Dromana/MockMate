@@ -17,21 +17,6 @@ interface RequestDetailPanelProps {
 
 type DetailTab = 'General' | 'Headers' | 'Payload' | 'Response' | 'HAR'
 
-function HeaderTable({ headers }: { headers: Record<string, string> }) {
-  const entries = Object.entries(headers)
-  if (entries.length === 0) return <p className="text-xs text-gray-400 dark:text-gray-500 italic">No headers</p>
-  return (
-    <div className="font-mono text-xs flex flex-col gap-0.5">
-      {entries.map(([name, value]) => (
-        <div key={name} className="flex gap-2 min-w-0">
-          <span className="text-gray-500 dark:text-gray-400 shrink-0">{name}:</span>
-          <span className="text-gray-800 dark:text-gray-200 break-all">{value}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function GeneralTab({ entry }: { entry: RequestLogEntry }) {
   const rows = [
     ['Request URL', entry.url],
@@ -464,7 +449,7 @@ function PayloadTab({ entry }: { entry: RequestLogEntry }) {
   const goPrev = useCallback(() => { if (matchCount > 0) setActiveMatch((i) => (i - 1 + matchCount) % matchCount) }, [matchCount])
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.shiftKey ? goPrev() : goNext() }
+    if (e.key === 'Enter') { if (e.shiftKey) goPrev(); else goNext() }
     if (e.key === 'Escape') { setSearchQuery(''); searchInputRef.current?.blur() }
   }
 
@@ -726,7 +711,7 @@ function ResponseTab({ entry }: { entry: RequestLogEntry }) {
   }, [matchCount])
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.shiftKey ? goPrev() : goNext() }
+    if (e.key === 'Enter') { if (e.shiftKey) goPrev(); else goNext() }
     if (e.key === 'Escape') { setSearchQuery(''); searchInputRef.current?.blur() }
   }
 

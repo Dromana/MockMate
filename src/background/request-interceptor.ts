@@ -437,7 +437,7 @@ export async function handleResponseStage(
       })
     } catch (err) {
       logger.warn('Failed to continue response with modified headers', err)
-      try { await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', { requestId }) } catch {}
+      try { await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', { requestId }) } catch { /* ignore */ }
     }
     return
   }
@@ -540,7 +540,7 @@ export async function handleResponseStage(
           })
         } catch (err) {
           logger.warn('Failed to apply modify_headers at response stage', err)
-          try { await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', { requestId }) } catch {}
+          try { await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', { requestId }) } catch { /* ignore */ }
         }
         return
       }

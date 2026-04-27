@@ -14,7 +14,6 @@ import { RedirectSection } from './RedirectSection'
 import { useRulesStore } from '@/panel/store/rules-store'
 import { useUIStore } from '@/panel/store/ui-store'
 import { MockRule, HttpMethod, BodyType, UrlPatternType, RuleAction } from '@/types'
-import { HeaderEntry } from './HeadersEditor'
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -209,7 +208,6 @@ export function RuleEditorModal() {
   }
 
   const onSubmit = (values: RuleFormValues) => {
-    console.log('[MockMate] onSubmit called with:', values.name, values.urlPattern)
     setSubmitErrors([])
 
     // JSON validation (moved out of Zod .refine() for Zod v4 compatibility)
@@ -293,7 +291,6 @@ export function RuleEditorModal() {
           <Button
             variant="primary"
             onClick={() => {
-              console.log('[MockMate] Create Rule clicked, formRef:', !!formRef.current)
               formRef.current?.requestSubmit()
             }}
           >

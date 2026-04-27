@@ -10,7 +10,7 @@ function buildHarFile(entries: RequestLogEntry[]): string {
     try {
       const urlObj = new URL(entry.url)
       queryString = Array.from(urlObj.searchParams.entries()).map(([name, value]) => ({ name, value }))
-    } catch {}
+    } catch { /* ignore */ }
 
     const requestHeaders = Object.entries(entry.requestHeaders ?? {}).map(([name, value]) => ({ name, value }))
     const responseHeaders = Object.entries(entry.responseHeaders ?? {}).map(([name, value]) => ({ name, value }))

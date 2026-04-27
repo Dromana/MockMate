@@ -51,7 +51,7 @@ export default function App() {
       })
     } else {
       chrome.runtime.sendMessage({ type: 'DETACH_DEBUGGER', tabId }, () => {
-        chrome.runtime.lastError // consume to suppress unchecked error
+        void chrome.runtime.lastError
       })
     }
   }, [rules, isGloballyEnabled])
