@@ -20,8 +20,5 @@ export default defineConfig({
         panel: resolve(__dirname, 'src/panel/index.html'),
       },
     },
-    watch: {
-      exclude: ['dist/**'],
-    },
   },
 })

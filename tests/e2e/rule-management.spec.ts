@@ -1,7 +1,5 @@
-import path from 'path'
-import { chromium } from '@playwright/test'
 import { test, expect } from './helpers/fixtures'
-import { fillMockResponseRule, openNewRuleModal } from './helpers/rule-form'
+import { fillMockResponseRule } from './helpers/rule-form'
 
 test.describe('Rule management', () => {
   test('edit an existing rule — change name and URL pattern, save, verify updated', async ({ panelPage }) => {

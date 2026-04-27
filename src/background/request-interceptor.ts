@@ -1,5 +1,5 @@
 import { MockRule, HeaderModification, QueryParamModification, RedirectConfig } from '@/types'
-import { findMatchingRule } from './rule-matcher'
+import { findMatchingRule, getRuleMatchFailReason } from './rule-matcher'
 import { broadcastLogMessage } from './log-broadcaster'
 import { parseGraphQL } from '@/shared/graphql'
 import { createLogger } from '@/shared/logger'
@@ -125,6 +125,19 @@ export async function handleRequestPaused(
   )
 
   if (!matchedRule) {
+    if (rules.length > 0) {
+      const incomingRequest = {
+        url: request.url,
+        method: request.method,
+        body: request.postData,
+        requestHeaders: Object.entries(request.headers ?? {}).map(([name, value]) => ({ name, value })),
+      }
+      for (const rule of rules) {
+        if (!rule.enabled) continue
+        const reason = getRuleMatchFailReason(incomingRequest, rule)
+        if (reason) logger.debug(`Rule "${rule.name}" did not match: ${reason}`)
+      }
+    }
     await continueRequest(tabId, requestId)
     return
   }
@@ -403,9 +416,13 @@ export async function handleRequestPaused(
 export async function handleResponseStage(
   tabId: number,
   requestId: string,
+  rules: MockRule[],
+  isGloballyEnabled: boolean,
+  requestInfo: { url: string; method: string; headers: Record<string, string>; postData?: string },
   _responseStatusCode?: number,
   currentHeaders?: Array<{ name: string; value: string }>,
 ): Promise<void> {
+  // 1. Normal path: request stage already ran and staged response header mods.
   const responseMods = pendingResponseHeaderMods.get(requestId)
   if (responseMods && responseMods.length > 0) {
     pendingResponseHeaderMods.delete(requestId)
@@ -420,15 +437,129 @@ export async function handleResponseStage(
       })
     } catch (err) {
       logger.warn('Failed to continue response with modified headers', err)
-      try { await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', { requestId }) } catch {}
+      try { await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', { requestId }) } catch { /* ignore */ }
     }
     return
   }
-  // Just continue — the panel logs response details via onRequestFinished
+
+  // 2. Race-condition guard: requests that reach the network before Fetch.enable
+  //    is re-established after a navigation miss the request stage entirely.
+  //    Apply what rules we still can at the response stage.
+  if (isGloballyEnabled) {
+    const gql = parseGraphQL(requestInfo.postData)
+    const incomingRequest = {
+      url: requestInfo.url,
+      method: requestInfo.method,
+      body: requestInfo.postData,
+      requestHeaders: Object.entries(requestInfo.headers).map(([name, value]) => ({ name, value })),
+    }
+    const matchedRule = findMatchingRule(incomingRequest, rules)
+
+    logger.debug(
+      `[response-stage] ${requestInfo.method} ${requestInfo.url} → ` +
+      (matchedRule ? `matched "${matchedRule.name}" (${matchedRule.action ?? 'mock_response'})` : `no match (${rules.length} rules)`)
+    )
+
+    if (!matchedRule && rules.length > 0) {
+      for (const rule of rules) {
+        if (!rule.enabled) continue
+        const reason = getRuleMatchFailReason(incomingRequest, rule)
+        if (reason) logger.debug(`[response-stage] Rule "${rule.name}" rejected: ${reason}`)
+      }
+    }
+
+    if (matchedRule && matchedRule.action === 'modify_headers') {
+      const mods = matchedRule.headersModification ?? { requestHeaders: [], responseHeaders: [] }
+      if (mods.responseHeaders.length === 0) {
+        logger.debug(
+          `[response-stage] Rule "${matchedRule.name}" matched but has no response header mods ` +
+          `(${mods.requestHeaders.length} request header mod(s) — those cannot be applied retroactively)`
+        )
+      }
+    }
+
+    if (matchedRule && (!matchedRule.action || matchedRule.action === 'mock_response')) {
+      const { response } = matchedRule
+      const responseHeaders = Object.entries(response.headers).map(([name, value]) => ({ name, value }))
+      if (!responseHeaders.some((h) => h.name.toLowerCase() === 'content-type')) {
+        if (response.bodyType === 'json') {
+          responseHeaders.push({ name: 'Content-Type', value: 'application/json' })
+        } else if (response.bodyType === 'html') {
+          responseHeaders.push({ name: 'Content-Type', value: 'text/html; charset=utf-8' })
+        } else if (response.bodyType === 'text') {
+          responseHeaders.push({ name: 'Content-Type', value: 'text/plain' })
+        }
+      }
+      broadcastLogMessage({
+        type: 'REQUEST_MOCKED',
+        url: requestInfo.url,
+        method: requestInfo.method,
+        graphqlOperationName: gql?.operationName ?? null,
+        ruleId: matchedRule.id,
+        ruleName: matchedRule.name,
+        statusCode: response.statusCode,
+        mockResponseBody: response.bodyType !== 'empty' ? response.body : null,
+        mockResponseHeaders: response.headers,
+      })
+      try {
+        await chrome.debugger.sendCommand({ tabId }, 'Fetch.fulfillRequest', {
+          requestId,
+          responseCode: response.statusCode,
+          responseHeaders,
+          body: response.bodyType !== 'empty' ? encodeBody(response.body) : '',
+        })
+        return
+      } catch (err) {
+        logger.warn('Failed to fulfill mock_response at response stage, falling through', err)
+      }
+    }
+
+    if (matchedRule && matchedRule.action === 'modify_headers') {
+      // Request headers can't be retroactively modified (request already reached server),
+      // but response header mods can still be applied.
+      const mods = matchedRule.headersModification ?? { requestHeaders: [], responseHeaders: [] }
+      if (mods.responseHeaders.length > 0) {
+        const existing: Record<string, string> = {}
+        for (const { name, value } of (currentHeaders ?? [])) existing[name] = value
+        const modified = applyHeaderMods(existing, mods.responseHeaders)
+        const modifiedHeaders = Object.entries(modified).map(([name, value]) => ({ name, value }))
+        broadcastLogMessage({
+          type: 'REQUEST_HEADERS_MODIFIED',
+          url: requestInfo.url,
+          method: requestInfo.method,
+          graphqlOperationName: gql?.operationName ?? null,
+          ruleId: matchedRule.id,
+          ruleName: matchedRule.name,
+          requestHeaderMods: [],
+          responseHeaderMods: mods.responseHeaders,
+        })
+        try {
+          await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', {
+            requestId,
+            responseHeaders: modifiedHeaders,
+          })
+        } catch (err) {
+          logger.warn('Failed to apply modify_headers at response stage', err)
+          try { await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', { requestId }) } catch { /* ignore */ }
+        }
+        return
+      }
+    }
+  }
+
+  // 3. Default: pass the real response through.
+  //    At response stage the correct CDP call is Fetch.continueResponse.
+  //    Fetch.continueRequest is for request-stage only; some Chrome versions
+  //    reject it at response stage, leaving the request hanging.
   try {
-    await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', { requestId })
-  } catch (err) {
-    logger.warn('Failed to continue response stage', err)
+    await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', { requestId })
+  } catch {
+    // Older Chrome may not support continueResponse — fall back to continueRequest.
+    try {
+      await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', { requestId })
+    } catch (err) {
+      logger.warn('Failed to continue response stage', err)
+    }
   }
 }
 

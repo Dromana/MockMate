@@ -3,9 +3,6 @@ import {
   openNewRuleModal,
   selectAction,
   fillMockRequestRule,
-  fillModifyHeadersRule,
-  fillModifyQueryParamsRule,
-  fillRedirectRule,
 } from './helpers/rule-form'
 
 test.describe('Rule actions', () => {
