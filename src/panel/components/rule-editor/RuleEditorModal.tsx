@@ -130,6 +130,20 @@ export function RuleEditorModal() {
 
   const action = watch('action')
 
+  // When the user switches to an action that operates across all operations
+  // (headers, params, redirect), clear the GraphQL operation name filter.
+  // These rule types are almost never scoped to a single operation, and leaving
+  // a stale operation name (pre-filled from a request) silently breaks matching.
+  const prevActionRef = useRef(action)
+  useEffect(() => {
+    if (action !== prevActionRef.current) {
+      prevActionRef.current = action
+      if (action === 'modify_headers' || action === 'redirect' || action === 'modify_query_params') {
+        setValue('graphqlOperationName', '')
+      }
+    }
+  }, [action, setValue])
+
   const matchHasError = MATCH_FIELDS.some((f) => f in errors)
   const responseHasError = RESPONSE_FIELDS.some((f) => f in errors)
 

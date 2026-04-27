@@ -6,7 +6,14 @@ const MAX_ENTRIES = 1000
 export type LogFilter = 'All' | 'GraphQL' | 'Fetch/XHR' | 'JS' | 'CSS' | 'Img' | 'Doc' | 'Other'
 
 // Queued mock notifications that arrived before the matching onRequestFinished entry.
-// Keyed by "METHOD:URL".
+// Keyed by "METHOD:URL[:graphqlOperationName]".
+//
+// IMPORTANT: these are FIFO queues (arrays), not single-value maps.  Multiple
+// simultaneous requests with the same URL + operation (e.g. duplicate GraphQL
+// queries) each produce their own SW notification.  Storing only the latest
+// value would silently drop the earlier notification so the second request's
+// HAR entry would be left as "passthrough".  Using a queue lets each arriving
+// onRequestFinished entry consume exactly one notification in arrival order.
 interface PendingMock {
   ruleId: string
   ruleName: string
@@ -14,7 +21,7 @@ interface PendingMock {
   mockResponseBody: string | null
   mockResponseHeaders: Record<string, string>
 }
-const pendingMocks = new Map<string, PendingMock>()
+const pendingMocks = new Map<string, PendingMock[]>()
 
 interface PendingPayloadMock {
   ruleId: string
@@ -22,14 +29,14 @@ interface PendingPayloadMock {
   mockRequestBody: string | null
   mockRequestAdditionalHeaders: Record<string, string>
 }
-const pendingPayloadMocks = new Map<string, PendingPayloadMock>()
+const pendingPayloadMocks = new Map<string, PendingPayloadMock[]>()
 
 interface PendingPayloadResponse {
   statusCode: number
   responseBody: string | null
   responseHeaders: Record<string, string>
 }
-const pendingPayloadResponses = new Map<string, PendingPayloadResponse>()
+const pendingPayloadResponses = new Map<string, PendingPayloadResponse[]>()
 
 interface PendingHeadersMod {
   ruleId: string
@@ -37,21 +44,34 @@ interface PendingHeadersMod {
   requestHeaderMods: HeaderModification[]
   responseHeaderMods: HeaderModification[]
 }
-const pendingHeadersMods = new Map<string, PendingHeadersMod>()
+const pendingHeadersMods = new Map<string, PendingHeadersMod[]>()
 
 interface PendingQueryParamsMod {
   ruleId: string
   ruleName: string
   queryParamMods: QueryParamModification[]
 }
-const pendingQueryParamsMods = new Map<string, PendingQueryParamsMod>()
+const pendingQueryParamsMods = new Map<string, PendingQueryParamsMod[]>()
 
 interface PendingRedirect {
   ruleId: string
   ruleName: string
   redirectedTo: string
 }
-const pendingRedirects = new Map<string, PendingRedirect>()
+const pendingRedirects = new Map<string, PendingRedirect[]>()
+
+function pendingPush<T>(map: Map<string, T[]>, key: string, value: T): void {
+  const q = map.get(key)
+  if (q) { q.push(value) } else { map.set(key, [value]) }
+}
+
+function pendingShift<T>(map: Map<string, T[]>, key: string): T | undefined {
+  const q = map.get(key)
+  if (!q || q.length === 0) return undefined
+  const value = q.shift()!
+  if (q.length === 0) map.delete(key)
+  return value
+}
 
 function decodeBase64Body(b64: string | null): string | null {
   if (!b64) return null
@@ -144,9 +164,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
     const key = entry.graphqlOperationName
       ? `${entry.method}:${entry.url}:${entry.graphqlOperationName}`
       : `${entry.method}:${entry.url}`
-    const mock = pendingMocks.get(key)
+    const mock = pendingShift(pendingMocks, key)
     if (mock) {
-      pendingMocks.delete(key)
       entry = {
         ...entry,
         status: 'mocked',
@@ -157,9 +176,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
         mockResponseHeaders: mock.mockResponseHeaders,
       }
     }
-    const headersMod = pendingHeadersMods.get(key)
+    const headersMod = pendingShift(pendingHeadersMods, key)
     if (headersMod) {
-      pendingHeadersMods.delete(key)
       entry = {
         ...entry,
         status: 'headers-modified',
@@ -171,9 +189,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
         },
       }
     }
-    const queryParamsMod = pendingQueryParamsMods.get(key)
+    const queryParamsMod = pendingShift(pendingQueryParamsMods, key)
     if (queryParamsMod) {
-      pendingQueryParamsMods.delete(key)
       entry = {
         ...entry,
         status: 'query-params-modified',
@@ -182,9 +199,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
         appliedQueryParamMods: queryParamsMod.queryParamMods,
       }
     }
-    const redirect = pendingRedirects.get(key)
+    const redirect = pendingShift(pendingRedirects, key)
     if (redirect) {
-      pendingRedirects.delete(key)
       entry = {
         ...entry,
         status: 'redirected',
@@ -193,9 +209,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
         redirectedTo: redirect.redirectedTo,
       }
     }
-    const payloadMock = pendingPayloadMocks.get(key)
+    const payloadMock = pendingShift(pendingPayloadMocks, key)
     if (payloadMock) {
-      pendingPayloadMocks.delete(key)
       entry = {
         ...entry,
         status: 'payload-mocked',
@@ -205,9 +220,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
         mockRequestAdditionalHeaders: payloadMock.mockRequestAdditionalHeaders,
       }
       // Apply proxy response data if it arrived before the HAR entry
-      const proxyResp = pendingPayloadResponses.get(key)
+      const proxyResp = pendingShift(pendingPayloadResponses, key)
       if (proxyResp) {
-        pendingPayloadResponses.delete(key)
         entry = {
           ...entry,
           statusCode: proxyResp.statusCode,
@@ -255,7 +269,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
     } else {
       // Entry hasn't arrived from onRequestFinished yet — queue for appendEntry
       const key = graphqlOperationName ? `${method}:${url}:${graphqlOperationName}` : `${method}:${url}`
-      pendingMocks.set(key, mockData)
+      pendingPush(pendingMocks, key, mockData)
     }
   },
 
@@ -284,7 +298,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       }))
     } else {
       const key = graphqlOperationName ? `${method}:${url}:${graphqlOperationName}` : `${method}:${url}`
-      pendingPayloadMocks.set(key, payloadMockData)
+      pendingPush(pendingPayloadMocks, key, payloadMockData)
     }
   },
 
@@ -313,7 +327,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
     } else {
       // Entry hasn't arrived from onRequestFinished yet — queue for appendEntry
       const key = graphqlOperationName ? `${method}:${url}:${graphqlOperationName}` : `${method}:${url}`
-      pendingPayloadResponses.set(key, { statusCode, responseBody, responseHeaders })
+      pendingPush(pendingPayloadResponses, key, { statusCode, responseBody, responseHeaders })
     }
   },
 
@@ -342,7 +356,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       }))
     } else {
       const key = graphqlOperationName ? `${method}:${url}:${graphqlOperationName}` : `${method}:${url}`
-      pendingHeadersMods.set(key, { ruleId, ruleName, requestHeaderMods, responseHeaderMods })
+      pendingPush(pendingHeadersMods, key, { ruleId, ruleName, requestHeaderMods, responseHeaderMods })
     }
   },
 
@@ -369,7 +383,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       }))
     } else {
       const key = graphqlOperationName ? `${method}:${url}:${graphqlOperationName}` : `${method}:${url}`
-      pendingQueryParamsMods.set(key, { ruleId, ruleName, queryParamMods })
+      pendingPush(pendingQueryParamsMods, key, { ruleId, ruleName, queryParamMods })
     }
   },
 
@@ -396,7 +410,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       }))
     } else {
       const key = graphqlOperationName ? `${method}:${url}:${graphqlOperationName}` : `${method}:${url}`
-      pendingRedirects.set(key, { ruleId, ruleName, redirectedTo })
+      pendingPush(pendingRedirects, key, { ruleId, ruleName, redirectedTo })
     }
   },
 

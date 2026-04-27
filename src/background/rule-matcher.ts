@@ -17,6 +17,44 @@ export function findMatchingRule(request: IncomingRequest, rules: MockRule[]): M
   return null
 }
 
+/** Returns null if the rule matches, or a string describing the first failing condition. */
+export function getRuleMatchFailReason(request: IncomingRequest, rule: MockRule): string | null {
+  const { match } = rule
+
+  if (!matchesPattern(request.url, match.urlPattern, match.urlPatternType)) {
+    return `url pattern "${match.urlPattern}" (${match.urlPatternType}) did not match "${request.url}"`
+  }
+
+  if (match.methods.length > 0) {
+    const method = request.method.toUpperCase() as HttpMethod
+    if (!match.methods.includes(method)) {
+      return `method "${request.method}" not in rule methods [${match.methods.join(', ')}]`
+    }
+  }
+
+  if (match.requestHeaders && match.requestHeaders.length > 0) {
+    for (const headerMatcher of match.requestHeaders) {
+      const found = request.requestHeaders?.find(
+        (h) => h.name.toLowerCase() === headerMatcher.name.toLowerCase(),
+      )
+      if (!found) return `required header "${headerMatcher.name}" not present in request`
+      if (!matchesHeaderValue(found.value, headerMatcher.value, headerMatcher.matchType)) {
+        return `header "${headerMatcher.name}" value "${found.value}" did not match expected "${headerMatcher.value}" (${headerMatcher.matchType})`
+      }
+    }
+  }
+
+  if (match.graphqlOperationName) {
+    const gql = parseGraphQL(request.body)
+    if (!gql) return `graphql operation name filter set to "${match.graphqlOperationName}" but request body is not valid GraphQL JSON (body: ${request.body ? request.body.slice(0, 120) : '<empty>'})`
+    if (gql.operationName !== match.graphqlOperationName) {
+      return `graphql operation name "${gql.operationName}" did not match rule filter "${match.graphqlOperationName}"`
+    }
+  }
+
+  return null
+}
+
 function matchesRule(request: IncomingRequest, rule: MockRule): boolean {
   const { match } = rule
 

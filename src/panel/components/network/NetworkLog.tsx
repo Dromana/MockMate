@@ -2,6 +2,80 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import { useLogStore, filterEntries, LogFilter } from '@/panel/store/log-store'
 import { NetworkLogItem } from './NetworkLogItem'
 import { RequestDetailPanel } from './RequestDetailPanel'
+import { RequestLogEntry } from '@/types'
+
+function buildHarFile(entries: RequestLogEntry[]): string {
+  const harEntries = entries.map((entry) => {
+    let queryString: Array<{ name: string; value: string }> = []
+    try {
+      const urlObj = new URL(entry.url)
+      queryString = Array.from(urlObj.searchParams.entries()).map(([name, value]) => ({ name, value }))
+    } catch {}
+
+    const requestHeaders = Object.entries(entry.requestHeaders ?? {}).map(([name, value]) => ({ name, value }))
+    const responseHeaders = Object.entries(entry.responseHeaders ?? {}).map(([name, value]) => ({ name, value }))
+
+    const responseBody = entry.mockResponseBody ?? entry.responseBody ?? ''
+    const responseMimeType =
+      responseHeaders.find((h) => h.name.toLowerCase() === 'content-type')?.value ?? 'application/octet-stream'
+    const requestMimeType =
+      requestHeaders.find((h) => h.name.toLowerCase() === 'content-type')?.value ?? 'application/octet-stream'
+
+    return {
+      startedDateTime: new Date(entry.timestamp).toISOString(),
+      time: entry.duration ?? -1,
+      request: {
+        method: entry.method,
+        url: entry.url,
+        httpVersion: 'HTTP/1.1',
+        cookies: [],
+        headers: requestHeaders,
+        queryString,
+        headersSize: -1,
+        bodySize: entry.requestBody ? entry.requestBody.length : -1,
+        ...(entry.requestBody ? { postData: { mimeType: requestMimeType, text: entry.requestBody } } : {}),
+      },
+      response: {
+        status: entry.statusCode ?? 0,
+        statusText: '',
+        httpVersion: 'HTTP/1.1',
+        cookies: [],
+        headers: responseHeaders,
+        content: {
+          size: responseBody.length,
+          mimeType: responseMimeType,
+          text: responseBody,
+        },
+        redirectURL: entry.redirectedTo ?? '',
+        headersSize: -1,
+        bodySize: entry.transferSize ?? -1,
+      },
+      cache: {},
+      timings: { send: 0, wait: entry.duration ?? -1, receive: 0 },
+      _mockmate: {
+        status: entry.status,
+        matchedRule: entry.matchedRuleName ?? null,
+        matchedRuleId: entry.matchedRuleId ?? null,
+      },
+    }
+  })
+
+  return JSON.stringify(
+    { log: { version: '1.2', creator: { name: 'MockMate', version: '1.0.0' }, entries: harEntries } },
+    null,
+    2,
+  )
+}
+
+function downloadFile(content: string, filename: string) {
+  const blob = new Blob([content], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 const FILTERS: LogFilter[] = ['All', 'GraphQL', 'Fetch/XHR', 'JS', 'CSS', 'Img', 'Doc', 'Other']
 
@@ -61,6 +135,11 @@ export function NetworkLog() {
     : typeFiltered
   const selectedEntry = entries.find((e) => e.id === selectedEntryId) ?? null
 
+  const handleExportHar = useCallback(() => {
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')
+    downloadFile(buildHarFile(filtered), `mockmate-${timestamp}.har`)
+  }, [filtered])
+
   useEffect(() => {
     const el = listRef.current
     if (!el) return
@@ -94,6 +173,17 @@ export function NetworkLog() {
             />
             Preserve log
           </label>
+          <button
+            onClick={handleExportHar}
+            disabled={filtered.length === 0}
+            title={filtered.length === 0 ? 'No requests to export' : `Export ${filtered.length} request${filtered.length === 1 ? '' : 's'} as HAR`}
+            className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M8 2v8M5 7l3 3 3-3M3 13h10" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Export HAR
+          </button>
           <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">{entries.length} requests</span>
         </div>
 

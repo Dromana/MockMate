@@ -16,7 +16,7 @@ interface ResponseStagedParams {
   requestId: string
   responseStatusCode?: number
   responseHeaders?: Array<{ name: string; value: string }>
-  request: { url: string; method: string; headers: Record<string, string> }
+  request: { url: string; method: string; headers: Record<string, string>; postData?: string }
 }
 
 interface FrameNavigatedParams {
@@ -139,11 +139,30 @@ export function handleDebuggerEvent(
   method: string,
   params: unknown,
 ): void {
+  _handleDebuggerEventAsync(source, method, params).catch((err) =>
+    logger.error('handleDebuggerEvent error', err),
+  )
+}
+
+async function _handleDebuggerEventAsync(
+  source: chrome.debugger.Debuggee,
+  method: string,
+  params: unknown,
+): Promise<void> {
   const { tabId } = source
   if (!tabId) return
 
-  const state = attachedTabs.get(tabId)
-  if (!state) return
+  let state = attachedTabs.get(tabId)
+  if (!state) {
+    // The MV3 service worker was restarted — the browser-level debugger attachment
+    // survives, but our in-memory attachedTabs map was cleared.  Reconstruct from
+    // storage so that paused requests are not left hanging indefinitely.
+    logger.info(`SW restart detected for tab ${tabId} — recovering state from storage`)
+    const rules = await loadRules()
+    const isGloballyEnabled = await loadGlobalEnabled()
+    state = { tabId, rules, isGloballyEnabled, mainFrameId: null }
+    attachedTabs.set(tabId, state)
+  }
 
   // Page.frameStartedLoading fires BEFORE any resources are requested — the earliest
   // signal that a main-frame navigation has begun. Re-enable Fetch so every
@@ -178,9 +197,15 @@ export function handleDebuggerEvent(
     const p = params as ResponseStagedParams
 
     if (p.responseStatusCode !== undefined) {
-      handleResponseStage(tabId, p.requestId, p.responseStatusCode, p.responseHeaders).catch(
-        (err) => logger.error('Error handling response stage', err),
-      )
+      handleResponseStage(
+        tabId,
+        p.requestId,
+        state.rules,
+        state.isGloballyEnabled,
+        p.request,
+        p.responseStatusCode,
+        p.responseHeaders,
+      ).catch((err) => logger.error('Error handling response stage', err))
     } else {
       handleRequestPaused(
         tabId,
