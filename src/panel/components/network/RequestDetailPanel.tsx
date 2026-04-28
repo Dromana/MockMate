@@ -391,6 +391,7 @@ function PayloadTab({ entry }: { entry: RequestLogEntry }) {
         graphqlOperationName: gqlName,
       })
     } else {
+      setEditedBody(displayBody ?? body ?? '')
       setEditMode(true)
     }
   }
@@ -757,6 +758,7 @@ function ResponseTab({ entry }: { entry: RequestLogEntry }) {
         graphqlOperationName: gqlName,
       })
     } else {
+      setEditedBody(displayBody ?? body ?? '')
       setEditMode(true)
     }
   }
