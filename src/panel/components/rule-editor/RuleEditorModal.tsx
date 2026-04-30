@@ -11,6 +11,7 @@ import { RequestOverrideSection } from './RequestOverrideSection'
 import { ModifyHeadersSection } from './ModifyHeadersSection'
 import { ModifyQueryParamsSection } from './ModifyQueryParamsSection'
 import { RedirectSection } from './RedirectSection'
+import { InjectScriptSection } from './InjectScriptSection'
 import { useRulesStore } from '@/panel/store/rules-store'
 import { useUIStore } from '@/panel/store/ui-store'
 import { MockRule, HttpMethod, BodyType, UrlPatternType, RuleAction } from '@/types'
@@ -26,7 +27,7 @@ const schema = z.object({
   body: z.string(),
   delayMs: z.number().min(0).max(5000),
   graphqlOperationName: z.string().optional(),
-  action: z.enum(['mock_response', 'mock_request', 'modify_headers', 'modify_query_params', 'redirect'] as const),
+  action: z.enum(['mock_response', 'mock_request', 'modify_headers', 'modify_query_params', 'redirect', 'inject_script'] as const),
   requestOverride: z.object({
     body: z.string(),
     bodyType: z.enum(['json', 'text', 'empty'] as const),
@@ -43,6 +44,14 @@ const schema = z.object({
     from: z.string(),
     to: z.string(),
     matchType: z.enum(['text', 'regex'] as const),
+  }),
+  injectScript: z.object({
+    timing: z.enum(['before_load', 'dom_ready', 'after_load'] as const),
+    codeType: z.enum(['js', 'css'] as const),
+    script: z.string(),
+    scheme: z.enum(['http', 'https', '*'] as const),
+    host: z.string(),
+    path: z.string(),
   }),
 })
 
@@ -78,6 +87,14 @@ function ruleToForm(rule: MockRule): RuleFormValues {
       to: rule.redirectConfig?.to ?? '',
       matchType: rule.redirectConfig?.matchType ?? 'text',
     },
+    injectScript: {
+      timing: rule.injectScript?.timing ?? 'before_load',
+      codeType: rule.injectScript?.codeType ?? 'js',
+      script: rule.injectScript?.script ?? '',
+      scheme: rule.injectScript?.scheme ?? 'https',
+      host: rule.injectScript?.host ?? '',
+      path: rule.injectScript?.path ?? '/*',
+    },
   }
 }
 
@@ -110,6 +127,14 @@ const defaultValues: RuleFormValues = {
     to: '',
     matchType: 'text',
   },
+  injectScript: {
+    timing: 'before_load',
+    codeType: 'js',
+    script: '',
+    scheme: 'https',
+    host: '',
+    path: '/*',
+  },
 }
 
 const MATCH_FIELDS = ['urlPattern', 'urlPatternType', 'methods', 'graphqlOperationName'] as const
@@ -139,6 +164,12 @@ export function RuleEditorModal() {
       prevActionRef.current = action
       if (action === 'modify_headers' || action === 'redirect' || action === 'modify_query_params') {
         setValue('graphqlOperationName', '')
+      }
+      // inject_script has no concept of request matching — jump straight to the Script tab
+      // and pre-fill urlPattern with '*' so the min(1) Zod rule always passes.
+      if (action === 'inject_script') {
+        setActiveTab('response')
+        setValue('urlPattern', '*')
       }
     }
   }, [action, setValue])
@@ -182,7 +213,7 @@ export function RuleEditorModal() {
           requestOverride,
           queryParamsModification,
         })
-        setActiveTab(prefillAction === 'mock_request' || prefillAction === 'modify_query_params' ? 'response' : 'match')
+        setActiveTab(prefillAction === 'mock_request' || prefillAction === 'modify_query_params' || prefillAction === 'inject_script' ? 'response' : 'match')
       } else {
         reset(defaultValues)
         setActiveTab('match')
@@ -200,7 +231,7 @@ export function RuleEditorModal() {
     if (reqBodyErr)                messages.push(reqBodyErr)
     if (messages.length === 0)     messages.push('Please fix the highlighted errors before saving.')
 
-    const hasMatchError = MATCH_FIELDS.some((f) => f in errs)
+    const hasMatchError = action !== 'inject_script' && MATCH_FIELDS.some((f) => f in errs)
     const hasResponseError = RESPONSE_FIELDS.some((f) => f in errs)
     if (hasMatchError) setActiveTab('match')
     else if (hasResponseError) setActiveTab('response')
@@ -269,6 +300,16 @@ export function RuleEditorModal() {
       redirectConfig: values.action === 'redirect'
         ? { from: values.redirectConfig.from, to: values.redirectConfig.to, matchType: values.redirectConfig.matchType }
         : undefined,
+      injectScript: values.action === 'inject_script'
+        ? {
+            timing: values.injectScript.timing,
+            codeType: values.injectScript.codeType,
+            script: values.injectScript.script,
+            scheme: values.injectScript.scheme,
+            host: values.injectScript.host,
+            path: values.injectScript.path || '/*',
+          }
+        : undefined,
     }
 
     if (editingRule) {
@@ -326,6 +367,7 @@ export function RuleEditorModal() {
               ['modify_headers', 'Modify Headers'],
               ['modify_query_params', 'Query Params'],
               ['redirect', 'Redirect'],
+              ['inject_script', 'Inject Script'],
             ] as [RuleAction, string][]).map(([mode, label]) => (
               <button
                 key={mode}
@@ -347,11 +389,12 @@ export function RuleEditorModal() {
             {action === 'modify_headers' && 'Forward the request, injecting or removing request/response headers.'}
             {action === 'modify_query_params' && 'Forward the request with added, overridden, or removed query parameters.'}
             {action === 'redirect' && 'Rewrite part of the request URL — useful for pointing requests at a different host or environment.'}
+            {action === 'inject_script' && 'Inject JavaScript into a matching page — runs before, during, or after page load. Useful for overriding cookies, globals, or feature flags.'}
           </p>
         </div>
 
         <div className="flex border-b border-gray-200 dark:border-gray-700">
-          {(['match', 'response'] as const).map((tab) => {
+          {(['match', 'response'] as const).filter((tab) => !(tab === 'match' && action === 'inject_script')).map((tab) => {
             const hasError = tab === 'match' ? matchHasError : responseHasError
             return (
               <button
@@ -369,6 +412,7 @@ export function RuleEditorModal() {
                   : action === 'modify_headers' ? 'Headers'
                   : action === 'modify_query_params' ? 'Query Params'
                   : action === 'redirect' ? 'Redirect'
+                  : action === 'inject_script' ? 'Script'
                   : 'Response'
                   : tab}
                 {hasError && <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500" />}
@@ -394,6 +438,9 @@ export function RuleEditorModal() {
         )}
         {activeTab === 'response' && action === 'redirect' && (
           <RedirectSection control={control} />
+        )}
+        {activeTab === 'response' && action === 'inject_script' && (
+          <InjectScriptSection control={control} />
         )}
       </form>
     </Modal>

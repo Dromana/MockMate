@@ -13,6 +13,7 @@ interface RulesStore {
   reorderRules: (fromIndex: number, toIndex: number) => void
   setGloballyEnabled: (val: boolean) => void
   loadFromStorage: () => Promise<void>
+  importRules: (newRules: MockRule[], mode: 'replace' | 'append') => void
 }
 
 export const useRulesStore = create<RulesStore>((set, get) => ({
@@ -73,6 +74,16 @@ export const useRulesStore = create<RulesStore>((set, get) => ({
       rules: (result[STORAGE_KEYS.RULES] as MockRule[]) ?? [],
       isGloballyEnabled: (result[STORAGE_KEYS.GLOBAL_ENABLED] as boolean) ?? true,
     })
+  },
+
+  importRules: (newRules, mode) => {
+    const now = Date.now()
+    const prepared = mode === 'append'
+      ? newRules.map((r) => ({ ...r, id: generateId(), createdAt: now, updatedAt: now }))
+      : newRules
+    const rules = mode === 'append' ? [...get().rules, ...prepared] : prepared
+    set({ rules })
+    persistAndSync(rules, get().isGloballyEnabled)
   },
 }))
 

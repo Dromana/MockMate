@@ -15,6 +15,7 @@ export default defineConfig({
     },
   },
   build: {
+    modulePreload: { polyfill: false },
     rollupOptions: {
       input: {
         panel: resolve(__dirname, 'src/panel/index.html'),

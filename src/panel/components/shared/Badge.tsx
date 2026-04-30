@@ -30,3 +30,19 @@ export function StatusBadge({ code }: StatusBadgeProps) {
     </span>
   )
 }
+
+interface InjectBadgeProps {
+  codeType: 'js' | 'css'
+}
+
+export function InjectBadge({ codeType }: InjectBadgeProps) {
+  const color = codeType === 'css'
+    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+    : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
+
+  return (
+    <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-mono font-semibold uppercase ${color}`}>
+      {codeType}
+    </span>
+  )
+}

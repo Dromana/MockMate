@@ -4,7 +4,18 @@ export type UrlPatternType = 'glob' | 'regex' | 'exact'
 
 export type BodyType = 'json' | 'html' | 'text' | 'empty'
 
-export type RuleAction = 'mock_response' | 'mock_request' | 'modify_headers' | 'modify_query_params' | 'redirect'
+export type RuleAction = 'mock_response' | 'mock_request' | 'modify_headers' | 'modify_query_params' | 'redirect' | 'inject_script'
+
+export type InjectScriptTiming = 'before_load' | 'dom_ready' | 'after_load'
+
+export interface InjectScriptConfig {
+  timing: InjectScriptTiming
+  codeType: 'js' | 'css'
+  script: string
+  scheme: 'http' | 'https' | '*'
+  host: string   // e.g. 'example.com', '*.example.com', '' = all hosts
+  path: string   // e.g. '/*', '/dashboard*'
+}
 
 export interface RedirectConfig {
   from: string
@@ -77,4 +88,5 @@ export interface MockRule {
   headersModification?: HeadersModification
   queryParamsModification?: QueryParamsModification
   redirectConfig?: RedirectConfig
+  injectScript?: InjectScriptConfig
 }
