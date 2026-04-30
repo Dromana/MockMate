@@ -12,6 +12,7 @@ export interface IncomingRequest {
 export function findMatchingRule(request: IncomingRequest, rules: MockRule[]): MockRule | null {
   for (const rule of rules) {
     if (!rule.enabled) continue
+    if (rule.action === 'inject_script') continue  // page-level only, not request-level
     if (matchesRule(request, rule)) return rule
   }
   return null
