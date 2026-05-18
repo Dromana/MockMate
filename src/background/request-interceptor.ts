@@ -10,8 +10,13 @@ const logger = createLogger('interceptor')
 // so they pass through the interceptor without being mocked again.
 const BYPASS_HEADER = 'x-mockmate-bypass'
 
-// Pending response header modifications for modify_headers rules, keyed by requestId.
+// Pending response header modifications for modify_headers rules.
+// Keyed by "<tab|target>:<requestId>" to avoid collisions across targets.
 const pendingResponseHeaderMods = new Map<string, HeaderModification[]>()
+
+function debuggeeKey(debuggee: chrome.debugger.Debuggee): string {
+  return debuggee.tabId !== undefined ? `tab:${debuggee.tabId}` : `target:${debuggee.targetId}`
+}
 
 function applyHeaderMods(
   headers: Record<string, string>,
@@ -73,7 +78,7 @@ function encodeBody(body: string): string {
 }
 
 export async function handleRequestPaused(
-  tabId: number,
+  debuggee: chrome.debugger.Debuggee,
   params: chrome.debugger.RequestPausedParams,
   rules: MockRule[],
   isGloballyEnabled: boolean,
@@ -97,20 +102,20 @@ export async function handleRequestPaused(
       .replace(/[?&]_mm_bypass=1$/, '')      // param at the end
 
     try {
-      await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', {
+      await chrome.debugger.sendCommand(debuggee, 'Fetch.continueRequest', {
         requestId,
         url: cleanUrl !== request.url ? cleanUrl : undefined,
         headers: cleanedHeaders,
       })
     } catch (err) {
       logger.warn('Failed to continue bypass request', err)
-      await continueRequest(tabId, requestId)
+      await continueRequest(debuggee, requestId)
     }
     return
   }
 
   if (!isGloballyEnabled) {
-    await continueRequest(tabId, requestId)
+    await continueRequest(debuggee, requestId)
     return
   }
 
@@ -138,7 +143,7 @@ export async function handleRequestPaused(
         if (reason) logger.debug(`Rule "${rule.name}" did not match: ${reason}`)
       }
     }
-    await continueRequest(tabId, requestId)
+    await continueRequest(debuggee, requestId)
     return
   }
 
@@ -230,7 +235,7 @@ export async function handleRequestPaused(
 
     try {
       const evalResult = await chrome.debugger.sendCommand(
-        { tabId },
+        debuggee,
         'Runtime.evaluate',
         {
           expression: script,
@@ -273,7 +278,7 @@ export async function handleRequestPaused(
 
       const responseHeaders = Object.entries(proxyResult.headers ?? {}).map(([name, value]) => ({ name, value }))
 
-      await chrome.debugger.sendCommand({ tabId }, 'Fetch.fulfillRequest', {
+      await chrome.debugger.sendCommand(debuggee, 'Fetch.fulfillRequest', {
         requestId,
         responseCode: proxyResult.status ?? 200,
         responseHeaders,
@@ -281,7 +286,7 @@ export async function handleRequestPaused(
       })
     } catch (err) {
       logger.warn('Failed to proxy request via Runtime.evaluate, falling back to passthrough', err)
-      await continueRequest(tabId, requestId)
+      await continueRequest(debuggee, requestId)
     }
     return
   }
@@ -289,7 +294,7 @@ export async function handleRequestPaused(
   if (matchedRule.action === 'redirect') {
     const config = matchedRule.redirectConfig
     if (!config?.from) {
-      await continueRequest(tabId, requestId)
+      await continueRequest(debuggee, requestId)
       return
     }
     const newUrl = applyRedirect(request.url, config)
@@ -303,13 +308,13 @@ export async function handleRequestPaused(
       redirectedTo: newUrl,
     })
     try {
-      await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', {
+      await chrome.debugger.sendCommand(debuggee, 'Fetch.continueRequest', {
         requestId,
         ...(newUrl !== request.url ? { url: newUrl } : {}),
       })
     } catch (err) {
       logger.warn('Failed to continue redirect request', err)
-      await continueRequest(tabId, requestId)
+      await continueRequest(debuggee, requestId)
     }
     return
   }
@@ -321,7 +326,7 @@ export async function handleRequestPaused(
       mods.requestHeaders,
     )
     if (mods.responseHeaders.length > 0) {
-      pendingResponseHeaderMods.set(requestId, mods.responseHeaders)
+      pendingResponseHeaderMods.set(`${debuggeeKey(debuggee)}:${requestId}`, mods.responseHeaders)
     }
     broadcastLogMessage({
       type: 'REQUEST_HEADERS_MODIFIED',
@@ -334,13 +339,13 @@ export async function handleRequestPaused(
       responseHeaderMods: mods.responseHeaders,
     })
     try {
-      await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', {
+      await chrome.debugger.sendCommand(debuggee, 'Fetch.continueRequest', {
         requestId,
         headers: Object.entries(modifiedHeaders).map(([name, value]) => ({ name, value })),
       })
     } catch (err) {
       logger.warn('Failed to continue modify_headers request', err)
-      await continueRequest(tabId, requestId)
+      await continueRequest(debuggee, requestId)
     }
     return
   }
@@ -358,13 +363,13 @@ export async function handleRequestPaused(
       queryParamMods: mods.params,
     })
     try {
-      await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', {
+      await chrome.debugger.sendCommand(debuggee, 'Fetch.continueRequest', {
         requestId,
         ...(modifiedUrl !== request.url ? { url: modifiedUrl } : {}),
       })
     } catch (err) {
       logger.warn('Failed to continue modify_query_params request', err)
-      await continueRequest(tabId, requestId)
+      await continueRequest(debuggee, requestId)
     }
     return
   }
@@ -398,7 +403,7 @@ export async function handleRequestPaused(
       }
     }
 
-    await chrome.debugger.sendCommand({ tabId }, 'Fetch.fulfillRequest', {
+    await chrome.debugger.sendCommand(debuggee, 'Fetch.fulfillRequest', {
       requestId,
       responseCode: response.statusCode,
       responseHeaders,
@@ -414,7 +419,7 @@ export async function handleRequestPaused(
 }
 
 export async function handleResponseStage(
-  tabId: number,
+  debuggee: chrome.debugger.Debuggee,
   requestId: string,
   rules: MockRule[],
   isGloballyEnabled: boolean,
@@ -423,21 +428,22 @@ export async function handleResponseStage(
   currentHeaders?: Array<{ name: string; value: string }>,
 ): Promise<void> {
   // 1. Normal path: request stage already ran and staged response header mods.
-  const responseMods = pendingResponseHeaderMods.get(requestId)
+  const pendingKey = `${debuggeeKey(debuggee)}:${requestId}`
+  const responseMods = pendingResponseHeaderMods.get(pendingKey)
   if (responseMods && responseMods.length > 0) {
-    pendingResponseHeaderMods.delete(requestId)
+    pendingResponseHeaderMods.delete(pendingKey)
     const existing: Record<string, string> = {}
     for (const { name, value } of (currentHeaders ?? [])) existing[name] = value
     const modified = applyHeaderMods(existing, responseMods)
     const modifiedHeaders = Object.entries(modified).map(([name, value]) => ({ name, value }))
     try {
-      await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', {
+      await chrome.debugger.sendCommand(debuggee, 'Fetch.continueResponse', {
         requestId,
         responseHeaders: modifiedHeaders,
       })
     } catch (err) {
       logger.warn('Failed to continue response with modified headers', err)
-      try { await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', { requestId }) } catch { /* ignore */ }
+      try { await chrome.debugger.sendCommand(debuggee, 'Fetch.continueResponse', { requestId }) } catch { /* ignore */ }
     }
     return
   }
@@ -502,7 +508,7 @@ export async function handleResponseStage(
         mockResponseHeaders: response.headers,
       })
       try {
-        await chrome.debugger.sendCommand({ tabId }, 'Fetch.fulfillRequest', {
+        await chrome.debugger.sendCommand(debuggee, 'Fetch.fulfillRequest', {
           requestId,
           responseCode: response.statusCode,
           responseHeaders,
@@ -534,13 +540,13 @@ export async function handleResponseStage(
           responseHeaderMods: mods.responseHeaders,
         })
         try {
-          await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', {
+          await chrome.debugger.sendCommand(debuggee, 'Fetch.continueResponse', {
             requestId,
             responseHeaders: modifiedHeaders,
           })
         } catch (err) {
           logger.warn('Failed to apply modify_headers at response stage', err)
-          try { await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', { requestId }) } catch { /* ignore */ }
+          try { await chrome.debugger.sendCommand(debuggee, 'Fetch.continueResponse', { requestId }) } catch { /* ignore */ }
         }
         return
       }
@@ -552,20 +558,20 @@ export async function handleResponseStage(
   //    Fetch.continueRequest is for request-stage only; some Chrome versions
   //    reject it at response stage, leaving the request hanging.
   try {
-    await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueResponse', { requestId })
+    await chrome.debugger.sendCommand(debuggee, 'Fetch.continueResponse', { requestId })
   } catch {
     // Older Chrome may not support continueResponse — fall back to continueRequest.
     try {
-      await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', { requestId })
+      await chrome.debugger.sendCommand(debuggee, 'Fetch.continueRequest', { requestId })
     } catch (err) {
       logger.warn('Failed to continue response stage', err)
     }
   }
 }
 
-async function continueRequest(tabId: number, requestId: string): Promise<void> {
+async function continueRequest(debuggee: chrome.debugger.Debuggee, requestId: string): Promise<void> {
   try {
-    await chrome.debugger.sendCommand({ tabId }, 'Fetch.continueRequest', { requestId })
+    await chrome.debugger.sendCommand(debuggee, 'Fetch.continueRequest', { requestId })
   } catch (err) {
     logger.warn('Failed to continue request', err)
   }
