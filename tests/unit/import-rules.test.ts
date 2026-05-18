@@ -140,6 +140,7 @@ describe('importRules', () => {
       useRulesStore.getState().importRules([makeRule()], 'replace')
       expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'UPDATE_RULES' }),
+        expect.any(Function),
       )
     })
   })
