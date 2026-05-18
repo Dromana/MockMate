@@ -93,9 +93,18 @@ function persistAndSync(rules: MockRule[], isGloballyEnabled: boolean): void {
     [STORAGE_KEYS.GLOBAL_ENABLED]: isGloballyEnabled,
   })
 
-  chrome.runtime.sendMessage({
-    type: 'UPDATE_RULES',
-    rules,
-    isGloballyEnabled,
-  })
+  // chrome.runtime can become undefined when the extension is reloaded while
+  // DevTools is open. Guard against it so the store doesn't crash — the background
+  // will pick up the correct state from storage on its next restart.
+  if (typeof chrome === 'undefined' || !chrome.runtime) return
+
+  try {
+    chrome.runtime.sendMessage({
+      type: 'UPDATE_RULES',
+      rules,
+      isGloballyEnabled,
+    }, () => void chrome.runtime.lastError)
+  } catch {
+    // Extension context invalidated — storage write above is still durable.
+  }
 }

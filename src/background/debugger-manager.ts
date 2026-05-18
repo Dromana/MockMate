@@ -38,7 +38,22 @@ interface AddScriptResult {
   identifier: string
 }
 
+interface AttachedToTargetParams {
+  sessionId: string
+  targetInfo: { targetId: string; type: string; url: string }
+  waitingForDebugger: boolean
+}
+
+interface DetachedFromTargetParams {
+  sessionId: string
+  targetId?: string
+}
+
 const attachedTabs = new Map<number, AttachState>()
+
+// Maps iframe/sub-target IDs to their parent tab ID so events from those
+// targets can be routed to the correct rule state.
+const attachedSubTargets = new Map<string, number>() // targetId → parentTabId
 
 const FETCH_PATTERNS = [
   { urlPattern: '*', requestStage: 'Request' },
@@ -237,8 +252,98 @@ export async function reEnableFetch(tabId: number): Promise<void> {
   try {
     await enableFetch(tabId)
     logger.debug(`Re-enabled Fetch on tab ${tabId}`)
+    // Re-enable on any attached iframe sub-targets for this tab.
+    for (const [targetId, pid] of attachedSubTargets) {
+      if (pid !== tabId) continue
+      try {
+        await chrome.debugger.sendCommand({ targetId }, 'Fetch.enable', { patterns: FETCH_PATTERNS })
+      } catch { /* sub-target may have gone away */ }
+    }
   } catch (err) {
     logger.warn(`Failed to re-enable Fetch on tab ${tabId}`, err)
+  }
+}
+
+/**
+ * Attaches MockMate's debugger to an iframe sub-target and enables Fetch
+ * interception on it. Called when Target.attachedToTarget fires for an iframe,
+ * or when we proactively discover existing OOPIF targets via discoverExistingIframeTargets.
+ */
+async function attachIframeTarget(parentTabId: number, targetId: string): Promise<void> {
+  if (attachedSubTargets.has(targetId)) return
+
+  logger.info(`Attaching to iframe target ${targetId} (tab ${parentTabId})`)
+
+  try {
+    await chrome.debugger.attach({ targetId }, '1.3')
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (!msg.includes('already attached')) {
+      logger.warn(`Failed to attach to iframe target ${targetId}: ${msg}`)
+      return
+    }
+    logger.debug(`Iframe target ${targetId} was already attached — continuing to Fetch.enable`)
+  }
+
+  try {
+    await chrome.debugger.sendCommand({ targetId }, 'Fetch.enable', { patterns: FETCH_PATTERNS })
+    attachedSubTargets.set(targetId, parentTabId)
+    logger.info(`Intercepting iframe target ${targetId} (tab ${parentTabId})`)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    logger.warn(`Failed to enable Fetch on iframe target ${targetId}: ${msg}`)
+    try { await chrome.debugger.detach({ targetId }) } catch { /* ignore */ }
+  }
+}
+
+/**
+ * Proactively discovers and attaches to any OOPIF targets that already exist for
+ * the given tab. Target.setAutoAttach fires Target.attachedToTarget for iframes
+ * created AFTER the setAutoAttach call, but iframes that were already in the page
+ * at attach-time may be missed. This function fills that gap.
+ */
+async function discoverExistingIframeTargets(parentTabId: number): Promise<void> {
+  try {
+    // First find the CDP targetId for our tab using the extension's getTargets API.
+    const allTargets: chrome.debugger.TargetInfo[] = await new Promise((resolve) => {
+      chrome.debugger.getTargets(resolve)
+    })
+    const tabTarget = allTargets.find((t) => t.tabId === parentTabId && t.type === 'page')
+    if (!tabTarget?.id) {
+      logger.debug(`discoverExistingIframeTargets: could not find targetId for tab ${parentTabId}`)
+      return
+    }
+
+    // CDP Target.getTargets returns all browser targets with their openerId.
+    // Iframe OOPIFs have openerId === parent page's targetId.
+    const result = await chrome.debugger.sendCommand(
+      { tabId: parentTabId },
+      'Target.getTargets',
+      {},
+    ) as { targetInfos: Array<{ targetId: string; type: string; url: string; openerId?: string }> }
+
+    const iframeTargets = result.targetInfos.filter(
+      (t) =>
+        (t.type === 'iframe' || t.type === 'page') &&
+        t.openerId === tabTarget.id &&
+        t.targetId !== tabTarget.id,
+    )
+
+    if (iframeTargets.length > 0) {
+      logger.info(
+        `Found ${iframeTargets.length} existing OOPIF target(s) for tab ${parentTabId}: ` +
+        iframeTargets.map((t) => `${t.targetId} (${t.url})`).join(', '),
+      )
+      for (const t of iframeTargets) {
+        attachIframeTarget(parentTabId, t.targetId).catch((err) =>
+          logger.warn(`Failed to attach to existing iframe target ${t.targetId}`, err),
+        )
+      }
+    } else {
+      logger.debug(`discoverExistingIframeTargets: no OOPIF targets found for tab ${parentTabId} (tabTargetId=${tabTarget.id})`)
+    }
+  } catch (err) {
+    logger.warn('discoverExistingIframeTargets failed', err)
   }
 }
 
@@ -264,6 +369,25 @@ export async function attachToTab(tabId: number): Promise<{ success: boolean; er
     await chrome.debugger.sendCommand({ tabId }, 'Network.enable', {})
     await chrome.debugger.sendCommand({ tabId }, 'Network.setBypassServiceWorker', { bypass: true })
     await enableFetch(tabId)
+
+    // Auto-attach to cross-origin iframe targets so their requests are also intercepted.
+    // waitForDebuggerOnStart:false lets iframes load without pausing.
+    try {
+      await chrome.debugger.sendCommand({ tabId }, 'Target.setAutoAttach', {
+        autoAttach: true,
+        waitForDebuggerOnStart: false,
+        flatten: false,
+      })
+    } catch (err) {
+      logger.warn(`Target.setAutoAttach not supported on tab ${tabId}`, err)
+    }
+
+    // Proactively attach to any OOPIFs that already existed when we called
+    // setAutoAttach — setAutoAttach only auto-notifies for iframes created AFTER
+    // the call in some Chrome versions; this fallback covers pre-existing ones.
+    discoverExistingIframeTargets(tabId).catch((err) =>
+      logger.warn('discoverExistingIframeTargets failed', err),
+    )
 
     let mainFrameId: string | null = null
     let currentUrl: string | null = null
@@ -302,6 +426,16 @@ export async function attachToTab(tabId: number): Promise<{ success: boolean; er
 
 export async function detachFromTab(tabId: number): Promise<void> {
   if (!attachedTabs.has(tabId)) return
+
+  // Detach from all iframe sub-targets belonging to this tab.
+  for (const [targetId, pid] of attachedSubTargets) {
+    if (pid !== tabId) continue
+    try {
+      await chrome.debugger.sendCommand({ targetId }, 'Fetch.disable', {})
+      await chrome.debugger.detach({ targetId })
+    } catch { /* ignore */ }
+    attachedSubTargets.delete(targetId)
+  }
 
   try {
     await chrome.debugger.sendCommand({ tabId }, 'Network.setBypassServiceWorker', { bypass: false })
@@ -349,8 +483,24 @@ async function _handleDebuggerEventAsync(
   method: string,
   params: unknown,
 ): Promise<void> {
-  const { tabId } = source
-  if (!tabId) return
+  // Resolve the tab ID from either the main tab or a sub-target (iframe).
+  const sourceTabId = source.tabId
+  const sourceTargetId = source.targetId
+  const tabId = sourceTabId ?? (sourceTargetId ? attachedSubTargets.get(sourceTargetId) : undefined)
+
+  // If this is a Fetch event from an unknown sub-target (e.g. after SW restart),
+  // unblock the request rather than leaving it hanging.
+  if (tabId === undefined) {
+    if (method === 'Fetch.requestPaused' && sourceTargetId) {
+      const p = params as ResponseStagedParams
+      const cmd = p.responseStatusCode !== undefined ? 'Fetch.continueResponse' : 'Fetch.continueRequest'
+      await chrome.debugger.sendCommand({ targetId: sourceTargetId }, cmd, { requestId: p.requestId }).catch(() => {})
+    }
+    return
+  }
+
+  // Build the debuggee to use for all CDP commands for this event.
+  const debuggee: chrome.debugger.Debuggee = sourceTargetId ? { targetId: sourceTargetId } : { tabId }
 
   let state = attachedTabs.get(tabId)
   if (!state) {
@@ -375,10 +525,18 @@ async function _handleDebuggerEventAsync(
   if (method === 'Page.frameStartedLoading') {
     const { frameId } = params as FrameStartedLoadingParams
     if (frameId === state.mainFrameId) {
+      // Clean up iframe sub-targets — they are invalidated on navigation.
+      for (const [tid, pid] of attachedSubTargets) {
+        if (pid !== tabId) continue
+        chrome.debugger.detach({ targetId: tid }).catch(() => {})
+        attachedSubTargets.delete(tid)
+      }
       reEnableFetch(tabId).catch((err) => logger.error('reEnableFetch failed', err))
       logger.debug(`Main frame started loading on tab ${tabId}`)
     } else {
       reEnableFetch(tabId).catch(() => { /* ignore */ })
+      // A sub-frame started loading — check if new OOPIF targets appeared.
+      discoverExistingIframeTargets(tabId).catch(() => { /* non-critical */ })
     }
     return
   }
@@ -390,8 +548,37 @@ async function _handleDebuggerEventAsync(
       const st = attachedTabs.get(tabId)
       if (st) attachedTabs.set(tabId, { ...st, mainFrameId: frame.id, currentUrl: frame.url })
       logger.debug(`Main frame navigated on tab ${tabId}: ${frame.url}`)
+      // Re-discover OOPIFs after main-frame navigation.
+      discoverExistingIframeTargets(tabId).catch(() => { /* non-critical */ })
     } else {
       reEnableFetch(tabId).catch(() => { /* ignore */ })
+      // Sub-frame navigated — check if new OOPIF targets appeared.
+      discoverExistingIframeTargets(tabId).catch(() => { /* non-critical */ })
+    }
+    return
+  }
+
+  // Target.attachedToTarget — a new iframe sub-target was auto-attached.
+  // Attach to it separately and enable Fetch interception.
+  if (method === 'Target.attachedToTarget') {
+    const { targetInfo } = params as AttachedToTargetParams
+    logger.info(`Target.attachedToTarget: type=${targetInfo.type} targetId=${targetInfo.targetId} url=${targetInfo.url}`)
+    if (targetInfo.type === 'iframe' || targetInfo.type === 'page') {
+      attachIframeTarget(tabId, targetInfo.targetId).catch((err) =>
+        logger.warn(`Failed to set up iframe target ${targetInfo.targetId}`, err),
+      )
+    }
+    return
+  }
+
+  // Target.detachedFromTarget — an iframe sub-target went away.
+  if (method === 'Target.detachedFromTarget') {
+    const p = params as DetachedFromTargetParams
+    const tid = p.targetId
+    if (tid && attachedSubTargets.has(tid)) {
+      attachedSubTargets.delete(tid)
+      chrome.debugger.detach({ targetId: tid }).catch(() => {})
+      logger.debug(`Iframe target ${tid} detached from tab ${tabId}`)
     }
     return
   }
@@ -416,7 +603,7 @@ async function _handleDebuggerEventAsync(
 
     if (p.responseStatusCode !== undefined) {
       handleResponseStage(
-        tabId,
+        debuggee,
         p.requestId,
         state.rules,
         state.isGloballyEnabled,
@@ -426,7 +613,7 @@ async function _handleDebuggerEventAsync(
       ).catch((err) => logger.error('Error handling response stage', err))
     } else {
       handleRequestPaused(
-        tabId,
+        debuggee,
         params as chrome.debugger.RequestPausedParams,
         state.rules,
         state.isGloballyEnabled,
@@ -436,10 +623,21 @@ async function _handleDebuggerEventAsync(
 }
 
 export function handleDebuggerDetach(source: chrome.debugger.Debuggee, _reason: string): void {
-  const { tabId } = source
-  if (!tabId) return
+  const { tabId, targetId } = source
 
-  if (attachedTabs.has(tabId)) {
+  // Sub-target (iframe) detached.
+  if (targetId) {
+    attachedSubTargets.delete(targetId)
+    return
+  }
+
+  if (tabId && attachedTabs.has(tabId)) {
+    // Clean up any remaining sub-targets for this tab.
+    for (const [tid, pid] of attachedSubTargets) {
+      if (pid !== tabId) continue
+      chrome.debugger.detach({ targetId: tid }).catch(() => {})
+      attachedSubTargets.delete(tid)
+    }
     attachedTabs.delete(tabId)
     logger.info(`Debugger detached unexpectedly from tab ${tabId}`)
   }
