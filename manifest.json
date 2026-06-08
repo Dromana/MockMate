@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "MockMate",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Intercept and mock HTTP requests from Chrome DevTools",
 
   "permissions": [
     "debugger",
     "storage",
     "tabs",
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
 
   "host_permissions": [

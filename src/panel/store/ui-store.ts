@@ -17,16 +17,20 @@ export interface RulePrefill {
   queryParams?: [string, string][]
 }
 
+export type AppSection = 'network' | 'rules' | 'sender'
+
 interface UIStore {
   isEditorOpen: boolean
   editingRule: MockRule | null
   prefillValues: RulePrefill | null
   searchQuery: string
   isDark: boolean
+  activeSection: AppSection
   openEditor: (rule?: MockRule | null, prefill?: RulePrefill) => void
   closeEditor: () => void
   setSearchQuery: (query: string) => void
   toggleDark: () => void
+  setActiveSection: (section: AppSection) => void
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -35,12 +39,14 @@ export const useUIStore = create<UIStore>((set) => ({
   prefillValues: null,
   searchQuery: '',
   isDark: localStorage.getItem('theme') === 'dark',
+  activeSection: 'network',
 
   openEditor: (rule, prefill) =>
     set({ isEditorOpen: true, editingRule: rule ?? null, prefillValues: prefill ?? null }),
   closeEditor: () =>
     set({ isEditorOpen: false, editingRule: null, prefillValues: null }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
+  setActiveSection: (activeSection) => set({ activeSection }),
   toggleDark: () =>
     set((state) => {
       const next = !state.isDark

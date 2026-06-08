@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import type { AppSection } from './store/ui-store'
 import { Header } from './components/layout/Header'
 import { StatusBar } from './components/layout/StatusBar'
 import { RuleList } from './components/rules/RuleList'
 import { NetworkLog } from './components/network/NetworkLog'
 import { RuleEditorModal } from './components/rule-editor/RuleEditorModal'
+import { RequestSender } from './components/request-sender/RequestSender'
 import { Modal } from './components/shared/Modal'
 import { useRulesStore } from './store/rules-store'
 import { useUIStore } from './store/ui-store'
@@ -12,22 +14,20 @@ import { useDevtoolsNetwork } from './hooks/useDevtoolsNetwork'
 import { Button } from './components/shared/Button'
 import type { MockRule } from '@/types'
 
-type Section = 'network' | 'rules'
-
-const NAV: { id: Section; label: string }[] = [
+const NAV: { id: AppSection; label: string }[] = [
   { id: 'network', label: 'Network Traffic' },
   { id: 'rules', label: 'Rule Executions' },
+  { id: 'sender', label: 'Request Sender' },
 ]
 
 export default function App() {
-  const [section, setSection] = useState<Section>('network')
   const [importPending, setImportPending] = useState<MockRule[] | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const loadFromStorage = useRulesStore((s) => s.loadFromStorage)
   const importRules = useRulesStore((s) => s.importRules)
   const rules = useRulesStore((s) => s.rules)
   const isGloballyEnabled = useRulesStore((s) => s.isGloballyEnabled)
-  const { openEditor, searchQuery, setSearchQuery } = useUIStore()
+  const { openEditor, searchQuery, setSearchQuery, activeSection: section, setActiveSection: setSection } = useUIStore()
 
   function handleExport() {
     const json = JSON.stringify(rules, null, 2)
@@ -118,6 +118,8 @@ export default function App() {
 
         <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
           {section === 'network' && <NetworkLog />}
+
+          {section === 'sender' && <RequestSender />}
 
           {section === 'rules' && (
             <>

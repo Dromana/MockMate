@@ -15,7 +15,19 @@ export const COMMON_STATUS_CODES = [200, 201, 204, 400, 401, 403, 404, 409, 422,
 export const STORAGE_KEYS = {
   RULES: 'mockmate_rules',
   GLOBAL_ENABLED: 'mockmate_global_enabled',
+  SAVED_REQUESTS: 'mockmate_saved_requests',
 } as const
+
+const BROWSER_HEADER_SET = new Set([
+  'user-agent', 'cookie', 'accept-encoding', 'connection', 'content-length',
+  'host', 'referer', 'origin', 'te', 'trailer', 'transfer-encoding', 'upgrade',
+  'via', 'date', 'expect', 'keep-alive', 'dnt', 'priority', 'accept-language',
+])
+
+export function isBrowserControlledHeader(key: string): boolean {
+  const lower = key.toLowerCase()
+  return lower.startsWith(':') || lower.startsWith('sec-') || BROWSER_HEADER_SET.has(lower)
+}
 
 export const METHOD_COLORS: Record<string, string> = {
   GET: 'bg-green-100 text-green-800',
