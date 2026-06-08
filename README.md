@@ -7,6 +7,7 @@ A Chrome DevTools extension for intercepting and mocking HTTP requests. Appears 
 - **Rule-based mocking** — match requests by URL pattern (glob, regex, exact), HTTP method, headers, or GraphQL operation name
 - **Custom responses** — override status code, response body, headers, and add artificial delays
 - **Network inspector** — view all network traffic with request/response details in real time
+- **Request Sender** — send HTTP requests directly from DevTools with full control over method, URL, headers, query params, and body
 - **Persistent rules** — rules are saved to Chrome storage and survive tab reloads
 - **Priority ordering** — control which rules take precedence when multiple rules match
 
@@ -62,6 +63,21 @@ This runs Vite in watch mode. Every save rebuilds the extension into `dist/`.
 | `npm run format` | Format with Prettier |
 | `npm run format:check` | Check formatting |
 | `npm run typecheck` | TypeScript type checking |
+
+## Using the Request Sender
+
+1. Open DevTools → MockMate panel
+2. Click **Request Sender** in the left sidebar
+3. Enter a URL and select an HTTP method
+4. Configure headers, query params, and body using the tabs
+5. Click **Send** — the response appears in the **Response** tab
+6. Save requests for later with the **Save** button
+
+**Headers tab:** Browser-controlled headers (e.g. `cookie`, `user-agent`, `sec-*`) are shown as read-only with an `auto` label — they are always managed by the browser and cannot be suppressed.
+
+**Params tab:** Uncheck any query parameter to exclude it from the request.
+
+**Tip:** Click the arrow icon on any request in the Network Log to load it directly into the Request Sender.
 
 ## Creating a Mock Rule
 

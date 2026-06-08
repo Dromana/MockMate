@@ -1,4 +1,4 @@
-import { ExtensionMessage, StatusResponse } from '@/types'
+import { ExtensionMessage, FetchResult, StatusResponse } from '@/types'
 import {
   attachToTab,
   detachFromTab,
@@ -45,6 +45,38 @@ export function handleMessage(
       }
       sendResponse(response)
       return false
+    }
+
+    case 'EXECUTE_FETCH': {
+      const { tabId, method, url, headers, body } = message
+      chrome.scripting.executeScript({
+        target: { tabId },
+        func: async (m: string, u: string, h: Record<string, string>, b: string | null) => {
+          const start = Date.now()
+          try {
+            const res = await fetch(u, {
+              method: m,
+              headers: h,
+              body: b ?? undefined,
+              credentials: 'include',
+            })
+            const resBody = await res.text()
+            const resHeaders: Record<string, string> = {}
+            res.headers.forEach((val, key) => { resHeaders[key] = val })
+            return { ok: true as const, status: res.status, statusText: res.statusText, headers: resHeaders, body: resBody, duration: Date.now() - start }
+          } catch (err) {
+            return { ok: false as const, error: String(err), duration: Date.now() - start }
+          }
+        },
+        args: [method, url, headers, body],
+      })
+        .then((results) => {
+          sendResponse((results[0]?.result ?? { ok: false, error: 'No result from page', duration: 0 }) as FetchResult)
+        })
+        .catch((err: unknown) => {
+          sendResponse({ ok: false, error: String(err), duration: 0 } satisfies FetchResult)
+        })
+      return true
     }
 
     default:

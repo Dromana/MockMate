@@ -10,6 +10,7 @@ function detectBodyType(headers: Record<string, string> | null): BodyType {
 }
 import { RequestLogEntry } from '@/types'
 import { useUIStore } from '@/panel/store/ui-store'
+import { useRequestSenderStore } from '@/panel/store/request-sender-store'
 
 interface RequestDetailPanelProps {
   entry: RequestLogEntry
@@ -938,7 +939,13 @@ const TABS: DetailTab[] = ['General', 'Headers', 'Payload', 'Response', 'HAR']
 
 export function RequestDetailPanel({ entry }: RequestDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>('Response')
-  const { openEditor } = useUIStore()
+  const { openEditor, setActiveSection } = useUIStore()
+  const loadFromLogEntry = useRequestSenderStore((s) => s.loadFromLogEntry)
+
+  const handleOpenInSender = () => {
+    loadFromLogEntry(entry)
+    setActiveSection('sender')
+  }
 
   const gqlName = entry.graphqlOperationName ?? undefined
   const urlPattern = useMemo(() => {
@@ -980,14 +987,23 @@ export function RequestDetailPanel({ entry }: RequestDetailPanelProps) {
             </button>
           ))}
         </div>
-        {entry.status !== 'payload-mocked' && (
+        <div className="ml-auto mr-2 flex items-center gap-1.5">
           <button
-            onClick={handleCreateMockRequest}
-            className="ml-auto mr-2 flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-gray-700 dark:text-gray-300 shrink-0"
+            onClick={handleOpenInSender}
+            className="flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-gray-700 dark:text-gray-300 shrink-0"
+            title="Open in Request Sender"
           >
-            Mock Request
+            Send
           </button>
-        )}
+          {entry.status !== 'payload-mocked' && (
+            <button
+              onClick={handleCreateMockRequest}
+              className="flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-gray-700 dark:text-gray-300 shrink-0"
+            >
+              Mock Request
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tab content */}

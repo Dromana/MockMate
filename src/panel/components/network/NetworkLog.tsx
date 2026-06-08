@@ -121,6 +121,46 @@ function useColumnResize() {
   return { widths, startResize }
 }
 
+function useDetailPanelResize(containerRef: React.RefObject<HTMLDivElement | null>, hasPanel: boolean) {
+  // null = not yet initialised; will be set to 50% of the container on first open
+  const [detailWidth, setDetailWidth] = useState<number | null>(null)
+  const detailWidthRef = useRef<number | null>(null)
+  detailWidthRef.current = detailWidth
+
+  // On first open, measure the container and default to 50%
+  useEffect(() => {
+    if (hasPanel && detailWidth === null) {
+      const w = containerRef.current?.offsetWidth
+      setDetailWidth(w ? Math.round(w / 2) : 400)
+    }
+  }, [hasPanel, detailWidth, containerRef])
+
+  const startDetailResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = detailWidthRef.current ?? Math.round((containerRef.current?.offsetWidth ?? 800) / 2)
+
+    const onMove = (ev: MouseEvent) => {
+      const containerW = containerRef.current?.offsetWidth ?? Infinity
+      const next = Math.max(200, Math.min(containerW - 200, startW - (ev.clientX - startX)))
+      setDetailWidth(next)
+    }
+    const onUp = () => {
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [containerRef])
+
+  // While the width hasn't been measured yet, fall back to half the container
+  const effectiveWidth = detailWidth ?? Math.round((containerRef.current?.offsetWidth ?? 800) / 2)
+
+  return { detailWidth: effectiveWidth, startDetailResize }
+}
+
 export function NetworkLog() {
   const { entries, preserveLog, filter, selectedEntryId, clearLog, setPreserveLog, setFilter, selectEntry } =
     useLogStore()
@@ -128,12 +168,15 @@ export function NetworkLog() {
   const { widths, startResize } = useColumnResize()
   const bottomRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   const typeFiltered = filterEntries(entries, filter)
   const filtered = urlFilter
     ? typeFiltered.filter((e) => e.url.toLowerCase().includes(urlFilter.toLowerCase()))
     : typeFiltered
   const selectedEntry = entries.find((e) => e.id === selectedEntryId) ?? null
+
+  const { detailWidth, startDetailResize } = useDetailPanelResize(containerRef, selectedEntry !== null)
 
   const handleExportHar = useCallback(() => {
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')
@@ -148,9 +191,9 @@ export function NetworkLog() {
   }, [entries.length])
 
   return (
-    <div className="flex flex-1 min-h-0 overflow-hidden">
+    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
       {/* Main area */}
-      <div className={`flex flex-col min-h-0 ${selectedEntry ? 'w-1/2' : 'w-full'}`}>
+      <div className={`flex flex-col min-h-0 ${selectedEntry ? 'flex-1 min-w-0' : 'w-full'}`}>
 
         {/* Toolbar row 1 */}
         <div className="flex items-center gap-3 px-3 py-1.5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
@@ -276,10 +319,18 @@ export function NetworkLog() {
         </div>
       </div>
 
+      {/* Resize handle */}
+      {selectedEntry && (
+        <div
+          onMouseDown={startDetailResize}
+          className="w-1 shrink-0 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 active:bg-blue-600 cursor-col-resize transition-colors"
+        />
+      )}
+
       {/* Detail panel */}
       {selectedEntry && (
-        <div className="w-1/2 flex flex-col min-h-0 border-l border-gray-200 dark:border-gray-700">
-          <div className="flex items-center px-2 py-1 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 shrink-0">
+        <div className="flex flex-col min-h-0 shrink-0" style={{ width: detailWidth }}>
+          <div className="flex items-center px-2 py-1 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 shrink-0">
             <button
               onClick={() => selectEntry(null)}
               className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-base leading-none cursor-pointer mr-2"

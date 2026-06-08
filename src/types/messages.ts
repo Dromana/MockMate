@@ -9,6 +9,7 @@ export type MessageType =
   | 'DEBUGGER_DETACHED'
   | 'REQUEST_MATCHED'
   | 'REQUEST_PAYLOAD_MOCKED'
+  | 'EXECUTE_FETCH'
 
 export interface AttachDebuggerMessage {
   type: 'ATTACH_DEBUGGER'
@@ -36,11 +37,25 @@ export interface StatusResponse {
   tabId: number
 }
 
+export interface ExecuteFetchMessage {
+  type: 'EXECUTE_FETCH'
+  tabId: number
+  method: string
+  url: string
+  headers: Record<string, string>
+  body: string | null
+}
+
+export type FetchResult =
+  | { ok: true; status: number; statusText: string; headers: Record<string, string>; body: string; duration: number }
+  | { ok: false; error: string; duration: number }
+
 export type ExtensionMessage =
   | AttachDebuggerMessage
   | DetachDebuggerMessage
   | UpdateRulesMessage
   | GetStatusMessage
+  | ExecuteFetchMessage
 
 // ── Network Log Types ──────────────────────────────────────────────────────
 
