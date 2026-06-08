@@ -20,6 +20,7 @@ export function RequestSender() {
   const body = useRequestSenderStore((s) => s.body)
   const bodyType = useRequestSenderStore((s) => s.bodyType)
   const response = useRequestSenderStore((s) => s.response)
+  const lastSendId = useRequestSenderStore((s) => s.lastSendId)
   const activeSavedRequestId = useRequestSenderStore((s) => s.activeSavedRequestId)
   const savedRequests = useRequestSenderStore((s) => s.savedRequests)
 
@@ -38,8 +39,8 @@ export function RequestSender() {
   const hasResponse = response.status !== null || response.error !== null || response.loading
 
   useEffect(() => {
-    if (hasResponse) setRequestTab('Response')
-  }, [hasResponse])
+    if (lastSendId > 0) setRequestTab('Response')
+  }, [lastSendId])
 
   const handleSave = () => {
     const activeName = activeSavedRequestId

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { generateId } from '@/shared/id-gen'
-import { STORAGE_KEYS } from '@/constants'
+import { STORAGE_KEYS, isBrowserControlledHeader } from '@/constants'
 import type { FetchResult, RequestLogEntry } from '@/types'
 
 export interface KeyValuePair {
@@ -58,6 +58,7 @@ interface RequestSenderStore {
 
   response: SenderResponse
   savedRequests: SavedRequest[]
+  lastSendId: number
 
   setMethod(method: string): void
   setUrl(url: string): void
@@ -86,6 +87,7 @@ export const useRequestSenderStore = create<RequestSenderStore>((set, get) => ({
   activeSavedRequestId: null,
   response: emptyResponse,
   savedRequests: [],
+  lastSendId: 0,
 
   setMethod: (method) => set({ method }),
   setUrl: (url) => set({ url }),
@@ -215,9 +217,11 @@ export const useRequestSenderStore = create<RequestSenderStore>((set, get) => ({
       }
     }
 
-    // Build headers object from enabled pairs
+    // Build headers object from enabled, non-browser-controlled pairs
     const headersObj: Record<string, string> = {}
-    headers.filter((h) => h.enabled && h.key).forEach((h) => { headersObj[h.key] = h.value })
+    headers
+      .filter((h) => h.enabled && h.key && !isBrowserControlledHeader(h.key))
+      .forEach((h) => { headersObj[h.key] = h.value })
 
     // Auto-add Content-Type for JSON body if not already set
     const hasContentType = Object.keys(headersObj).some((k) => k.toLowerCase() === 'content-type')
@@ -227,7 +231,7 @@ export const useRequestSenderStore = create<RequestSenderStore>((set, get) => ({
 
     const requestBody = bodyType !== 'none' && body.trim() ? body : null
 
-    set({ response: { ...emptyResponse, loading: true } })
+    set({ response: { ...emptyResponse, loading: true }, lastSendId: get().lastSendId + 1 })
 
     const tabId = chrome.devtools?.inspectedWindow?.tabId
     if (!tabId) {
