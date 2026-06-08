@@ -36,8 +36,6 @@ export function RequestSender() {
 
   useEffect(() => { loadFromStorage() }, [loadFromStorage])
 
-  const hasResponse = response.status !== null || response.error !== null || response.loading
-
   useEffect(() => {
     if (lastSendId > 0) setRequestTab('Response')
   }, [lastSendId])
